@@ -201,3 +201,18 @@ header h1 {
   flex-direction: column;
   gap: 1rem;
 }
+
+/* Accessibility: Ensure intense contrast and visual cues for Keyboard Navigation */
+:focus-visible {
+  outline: 3px solid #10b981;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+button:focus-visible, 
+input:focus-visible, 
+select:focus-visible, 
+a:focus-visible {
+  outline: 3px solid #3b82f6 !important;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
