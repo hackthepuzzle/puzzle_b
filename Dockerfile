@@ -1,24 +1,22 @@
 # Stage 1: Build the Vite frontend application
 FROM node:18-slim AS build-frontend
-
 WORKDIR /app/frontend
 
-# Install dependencies and build
 COPY frontend/package*.json ./
 RUN npm install
+
 COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Create the final server containing both frontend and backend
 FROM node:18-slim
-
 WORKDIR /app
 
-# Install backend dependencies
+# Ensure we have the backend package.json
 COPY backend/package*.json ./
-RUN npm install --only=production
+# npm > v8 supports --omit=dev, removing --only=production to avoid errors
+RUN npm install --omit=dev
 
-# Copy backend source
 COPY backend/ ./
 
 # Copy built frontend assets from the previous stage into the 'public' directory
