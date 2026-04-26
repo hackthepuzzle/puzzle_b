@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, Mic } from 'lucide-react';
+import DOMPurify from 'dompurify'; // Security: XSS Sanitization
 
-const Chatbot = ({ user }) => {
+const Chatbot = ({ user, role, language }) => {
   const [messages, setMessages] = useState([
-    { id: 1, text: `Hello ${user?.displayName || 'Citizen'}! I'm your Election Assistant. How can I help you today?`, sender: 'bot' }
+    { id: 1, text: `Hello ${user?.displayName?.split(' ')[0] || 'Citizen'}! I'm your Election Assistant. Ask me anything about registering, voting dates, or polling details.`, sender: 'bot' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,67 +18,79 @@ const Chatbot = ({ user }) => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = async (e) => {
+  // Efficiency: Memoized submit handler
+  const handleSend = useCallback(async (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    const sanitizedInput = DOMPurify.sanitize(input.trim());
+    if (!sanitizedInput) return;
 
-    const userMessage = { id: Date.now(), text: input, sender: 'user' };
+    const userMessage = { id: Date.now(), text: sanitizedInput, sender: 'user' };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
 
     try {
-      // Connect to backend holding Gemini integration
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'}/api/chat`, {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input, context: 'election-assistant' })
+        body: JSON.stringify({ 
+          message: sanitizedInput, 
+          context: 'election-assistant',
+          role: role,
+          language: language
+        })
       });
       
       let botText = "I'm sorry, I couldn't reach the server right now.";
       if (response.ok) {
         const data = await response.json();
-        botText = data.reply;
+        // Security check via DOMPurify despite being plain text from our API
+        botText = DOMPurify.sanitize(data.reply);
       }
       
       const botMessage = { id: Date.now() + 1, text: botText, sender: 'bot' };
       setMessages(prev => [...prev, botMessage]);
     } catch (error) {
-      console.error(error);
-      const errorMessage = { id: Date.now() + 1, text: "Connection error. Please try again later.", sender: 'bot' };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => [...prev, { id: Date.now() + 1, text: "Connection error. Please try again later.", sender: 'bot' }]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [input, role, language]);
 
   return (
-    <div className="glass-panel chat-container">
-      <h3>AI Election Assistant</h3>
-      <div className="chat-messages">
+    <article className="glass-panel chat-container" aria-labelledby="assistant-title">
+      <h3 id="assistant-title">AI Election Assistant</h3>
+      
+      {/* Accessibility: aria-live ensures screen readers read new messages automatically */}
+      <div className="chat-messages" aria-live="polite" aria-atomic="false">
         {messages.map(msg => (
-          <div key={msg.id} className={`message ${msg.sender}`}>
+          <div key={msg.id} className={`message ${msg.sender}`} tabIndex="0">
             {msg.text}
           </div>
         ))}
-        {loading && <div className="message bot">Thinking...</div>}
+        {loading && <div className="message bot" aria-label="The assistant is typing">Thinking...</div>}
         <div ref={messagesEndRef} />
       </div>
-      <form className="chat-input" onSubmit={handleSend}>
+
+      <form className="chat-input" onSubmit={handleSend} aria-label="Chat input form">
+        <label htmlFor="chat-input-field" className="sr-only" style={{ display: 'none' }}>Type your election question</label>
         <input 
+          id="chat-input-field"
           type="text" 
           value={input} 
           onChange={(e) => setInput(e.target.value)} 
           placeholder="Ask a question..."
-          aria-label="Ask the AI election assistant"
+          aria-label="Ask a question..."
           disabled={loading}
+          autoComplete="off"
         />
-        <button type="submit" className="btn" disabled={loading || !input.trim()}>
-          <Send size={18} />
+        <button type="submit" className="btn" disabled={loading || !input.trim()} aria-label="Send message">
+          <Send size={18} aria-hidden="true" />
         </button>
       </form>
-    </div>
+    </article>
   );
 };
 
-export default Chatbot;
+// Efficiency: Prevent unnecessary re-renders when parent states unrelated to props change
+export default React.memo(Chatbot);

@@ -1,33 +1,42 @@
-// Assuming a mock or an integration test structure using supertest 
-// For demonstration, we simply unit test the expected behavioral conditions
+// tests/api.test.js
+import request from 'supertest';
+import { appServer } from '../backend/server.js'; // Requires export appServer from server.js
 
-describe('Backend API Endpoints', () => {
-  test('GET /api/health should return ok syntax', () => {
-    const mockRes = { json: jest.fn() };
-    const mockReq = {};
-    
-    // Inline implementation mock for testing
-    const healthHandler = (req, res) => {
-       res.json({ status: 'ok', service: 'ElectoGuide API' });
-    };
-    
-    healthHandler(mockReq, mockRes);
-    
-    expect(mockRes.json).toHaveBeenCalledWith({ status: 'ok', service: 'ElectoGuide API' });
+describe('Backend API Controller Tests', () => {
+  
+  test('GET /api/health should return healthy status', async () => {
+    const response = await request(appServer).get('/api/health');
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('status', 'healthy');
+    expect(response.body).toHaveProperty('timestamp');
   });
 
-  test('POST /api/chat should require a message body', () => {
-    const mockRes = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-    const mockReq = { body: {} }; // Missing message
+  describe('POST /api/chat Gemini Integration', () => {
     
-    const chatHandler = (req, res) => {
-        if (!req.body.message) return res.status(400).json({ error: 'Message is required' });
-        res.json({ reply: 'ok' });
-    };
-    
-    chatHandler(mockReq, mockRes);
-    
-    expect(mockRes.status).toHaveBeenCalledWith(400);
-    expect(mockRes.json).toHaveBeenCalledWith({ error: 'Message is required' });
+    test('Should return 400 when message body is missing', async () => {
+      const response = await request(appServer)
+        .post('/api/chat')
+        .send({ role: 'student' });
+        
+      expect(response.status).toBe(400);
+      expect(response.body.errors[0].msg).toBe('Message must be provided as a string');
+    });
+
+    test('Should return mocked response if Gemini API key absent', async () => {
+      const payload = {
+        message: "Where do I vote?",
+        role: "journalist",
+        language: "english"
+      };
+
+      const response = await request(appServer)
+        .post('/api/chat')
+        .send(payload);
+        
+      // Will return 200 Mock fallback because process.env.GEMINI_API_KEY is null in test setup
+      expect(response.status).toBe(200);
+      expect(response.body.reply).toMatch(/\(Mock Mode\) You asked: Where do I vote\?/);
+    });
+
   });
 });
